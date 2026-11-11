@@ -37,11 +37,18 @@ public class LockCamActivity extends Activity {
     private TextView status;
     private ImageButton muteButton;
     private ExoPlayer player;
+    private CamStream cam2;
     private boolean muted;
     /** True once the camera has actually been on a lit screen (not just launched while asleep). */
     private boolean shown;
 
+    /** True while a lock-screen view is on screen (so a new detection extends it, not re-opens it). */
+    static volatile boolean showing;
+    /** How it ended, for the cool-down: 0 = no cool-down, 1 = closed by hand, 2 = by its own timer. */
+    private int closeKind;
+
     private final Runnable autoClose = () -> {
+        closeKind = 2;
         // Let the screen go dark again: stop holding it on before closing.
         getWindow().clearFlags(android.view.WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON);
         findViewById(android.R.id.content).setKeepScreenOn(false);
@@ -60,7 +67,8 @@ public class LockCamActivity extends Activity {
         public void onReceive(Context context, Intent intent) {
             // Phone unlocked while watching: carry on in the floating window.
             if (android.provider.Settings.canDrawOverlays(LockCamActivity.this)) {
-                startForegroundService(new Intent(LockCamActivity.this, FloatService.class));
+                startForegroundService(new Intent(LockCamActivity.this, FloatService.class)
+                        .putExtra(FloatService.EXTRA_DUAL, true));
             }
             finish();
         }
@@ -76,8 +84,19 @@ public class LockCamActivity extends Activity {
         status = findViewById(R.id.status);
         muteButton = findViewById(R.id.btn_mute);
         findViewById(R.id.btn_pip).setVisibility(View.GONE);
-        findViewById(R.id.btn_close).setOnClickListener(v -> finish());
+        showing = true;
+        findViewById(R.id.btn_close).setOnClickListener(v -> {
+            closeKind = 1;
+            finish();
+        });
         SnoozeUi.attach(findViewById(android.R.id.content), this::finish, null);
+        ((TextView) findViewById(R.id.label)).setText(Prefs.camName(this));
+        if (Prefs.hasCam2(this)) {
+            ((TextView) findViewById(R.id.label2)).setText(Prefs.name2(this));
+            findViewById(R.id.pane2).setVisibility(View.VISIBLE);
+            cam2 = new CamStream(this, findViewById(R.id.video2), findViewById(R.id.status2),
+                    Prefs.rtsp2Uri(this));
+        }
         muted = Prefs.muted(this);
         updateMuteIcon();
         muteButton.setOnClickListener(v -> {
@@ -128,6 +147,8 @@ public class LockCamActivity extends Activity {
     @Override
     protected void onDestroy() {
         super.onDestroy();
+        showing = false;
+        if (closeKind != 0) Prefs.startCooldown(this, closeKind == 2);
         handler.removeCallbacksAndMessages(null);
         try {
             unregisterReceiver(unlocked);
@@ -176,10 +197,12 @@ public class LockCamActivity extends Activity {
                 .createMediaSource(MediaItem.fromUri(Prefs.rtspUri(this))));
         player.setPlayWhenReady(true);
         player.prepare();
+        if (cam2 != null) cam2.start();
     }
 
     private void releasePlayer() {
         handler.removeCallbacks(retry);
+        if (cam2 != null) cam2.release();
         if (player != null) {
             video.setPlayer(null);
             player.release();

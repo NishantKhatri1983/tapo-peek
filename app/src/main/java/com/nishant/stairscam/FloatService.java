@@ -51,6 +51,8 @@ public class FloatService extends Service {
     static final String ACTION_STOP = "com.nishant.stairscam.STOP";
     /** Opened by a detection alert: close by itself unless the user touches it. */
     static final String EXTRA_AUTO = "auto";
+    /** Show the second camera too (set by detections and by the lock-screen hand-over). */
+    static final String EXTRA_DUAL = "dual";
     private static final long AUTO_CLOSE_MS = 60_000;
     private static final String CHANNEL = "live";
     private static final long RETRY_MS = 3000;
@@ -66,6 +68,8 @@ public class FloatService extends Service {
     private View controls;
     private ImageButton muteButton;
     private ExoPlayer player;
+    private CamStream cam2;
+    private boolean dual;
     private boolean muted;
     private int screenW, screenH, margin, minW;
 
@@ -76,7 +80,12 @@ public class FloatService extends Service {
         }
     };
 
-    private final Runnable autoClose = this::stopSelf;
+    /** How this window ended, for the cool-down: by its own timer, or the screen turning off. */
+    private boolean closedByTimer, closedByScreenOff;
+    private final Runnable autoClose = () -> {
+        closedByTimer = true;
+        stopSelf();
+    };
     private boolean userTouched;
 
     private final Runnable retry = () -> {
@@ -89,6 +98,7 @@ public class FloatService extends Service {
     private final BroadcastReceiver screenOff = new BroadcastReceiver() {
         @Override
         public void onReceive(Context context, Intent intent) {
+            closedByScreenOff = true;
             stopSelf(); // Don't keep streaming in a pocket.
         }
     };
@@ -108,6 +118,8 @@ public class FloatService extends Service {
         boolean fresh = root == null;
         goForeground();
         if (fresh) {
+            dual = (auto || (intent != null && intent.getBooleanExtra(EXTRA_DUAL, false)))
+                    && Prefs.hasCam2(this);
             running = true;
             userTouched = false;
             showWindow();
@@ -128,6 +140,7 @@ public class FloatService extends Service {
     public void onDestroy() {
         super.onDestroy();
         running = false;
+        if (!closedByScreenOff) Prefs.startCooldown(this, closedByTimer);
         handler.removeCallbacksAndMessages(null);
         try {
             unregisterReceiver(screenOff);
@@ -202,10 +215,17 @@ public class FloatService extends Service {
             toggleMute();
             showControls();
         });
+        ((TextView) root.findViewById(R.id.label)).setText(Prefs.camName(this));
+        if (dual) {
+            ((TextView) root.findViewById(R.id.label2)).setText(Prefs.name2(this));
+            root.findViewById(R.id.pane2).setVisibility(View.VISIBLE);
+            cam2 = new CamStream(this, root.findViewById(R.id.video2),
+                    root.findViewById(R.id.status2), Prefs.rtsp2Uri(this));
+        }
         root.findViewById(R.id.btn_close).setOnClickListener(v -> stopSelf());
         SnoozeUi.attach(root, this::stopSelf, this::showControls);
 
-        final float radius = 18 * density;
+        final float radius = 24 * density;
         root.setOutlineProvider(new ViewOutlineProvider() {
             @Override
             public void getOutline(View view, Outline outline) {
@@ -240,7 +260,7 @@ public class FloatService extends Service {
     private void setWidth(int w) {
         w = Math.max(minW, Math.min(w, screenW));
         lp.width = w;
-        lp.height = Math.round(w * 9f / 16f);
+        lp.height = Math.round(w * 9f / 16f) * (dual ? 2 : 1);
     }
 
     private void clampPosition() {
@@ -396,10 +416,15 @@ public class FloatService extends Service {
                 .createMediaSource(MediaItem.fromUri(Prefs.rtspUri(this))));
         player.setPlayWhenReady(true);
         player.prepare();
+        if (cam2 != null) cam2.start();
     }
 
     private void releasePlayer() {
         handler.removeCallbacks(retry);
+        if (cam2 != null) {
+            cam2.release();
+            cam2 = null;
+        }
         if (player != null) {
             video.setPlayer(null);
             player.release();

@@ -30,6 +30,12 @@ public class DetectListener extends NotificationListenerService {
     private static final String[] IGNORE_WORDS = {"offline", "online", "firmware", "update", "storage", "sd card"};
 
     @Override
+    public void onListenerConnected() {
+        // Android (re)binds us after a reboot or update: a good moment to revive the camera watcher.
+        if (Prefs.watchOn(this) && !WatchService.running) WatchService.sync(this);
+    }
+
+    @Override
     public void onNotificationPosted(StatusBarNotification sbn) {
         if (!TAPO.equals(sbn.getPackageName())) return;
         Bundle x = sbn.getNotification().extras;
@@ -38,29 +44,63 @@ public class DetectListener extends NotificationListenerService {
                 + str(x.getCharSequence(Notification.EXTRA_BIG_TEXT)) + " | "
                 + str(x.getCharSequence(Notification.EXTRA_SUB_TEXT)));
         Prefs.setLastTapoAlert(this, sbn.getNotification().getChannelId() + " :: " + text);
+        for (String k : x.keySet()) {
+            Object v = x.get(k);
+            String s = String.valueOf(v);
+            Log.i(TAG, "  extra " + k + " (" + (v == null ? "null" : v.getClass().getSimpleName()) + ") = "
+                    + (s.length() > 300 ? s.substring(0, 300) + "..." : s));
+        }
+        Log.i(TAG, "  category=" + sbn.getNotification().category + " group=" + sbn.getNotification().getGroup()
+                + " tag=" + sbn.getTag() + " id=" + sbn.getId() + " key=" + sbn.getKey());
         Log.i(TAG, "Tapo notification: " + text);
 
         if (!Prefs.autoOpen(this) || !Prefs.configured(this)) return;
         if (!matches(text.toLowerCase(Locale.ROOT), Prefs.camName(this).toLowerCase(Locale.ROOT))) return;
-        handleDetection(this);
+        boolean person = isPersonAlert(text.toLowerCase(Locale.ROOT));
+        int kind = Prefs.alertKind(this);
+        if ((person && kind == Prefs.KIND_MOTION) || (!person && kind == Prefs.KIND_PERSON)) {
+            Log.i(TAG, "Detection ignored: " + (person ? "person" : "motion") + " alert not selected");
+            EventLog.add(this, "TAPO " + (person ? "person" : "motion") + " alert -> ignored (not selected)");
+            return;
+        }
+        handleDetection(this, "TAPO " + (person ? "person" : "motion") + " alert");
+    }
+
+    /** Tapo's person-detection alerts say "person"; plain motion-zone alerts say "motion". */
+    static boolean isPersonAlert(String lowerText) {
+        return lowerText.contains("person") || lowerText.contains("people") || lowerText.contains("human");
     }
 
     /** Same path for a real Tapo alert and for the USB test trigger. */
     static void handleDetection(Context c) {
-        if (!Settings.canDrawOverlays(c)) return;
+        handleDetection(c, "test trigger");
+    }
+
+    static void handleDetection(Context c, String source) {
+        EventLog.add(c, source + " -> " + decide(c));
+    }
+
+    private static String decide(Context c) {
+        if (!Settings.canDrawOverlays(c)) return "ignored (no overlay permission)";
         if (Prefs.isPaused(c)) {
             Log.i(TAG, "Detection ignored: paused until " + Prefs.clock(Prefs.pausedUntil(c)));
-            return;
+            return "ignored (paused until " + Prefs.clock(Prefs.pausedUntil(c)) + ")";
         }
         if (Prefs.inQuietHours(c)) {
             Log.i(TAG, "Detection ignored: quiet hours");
-            return;
+            return "ignored (quiet hours)";
+        }
+        // Cool-down only applies while no pop-up is open; an open one is simply kept alive.
+        boolean popupOpen = FloatService.running || LockCamActivity.showing;
+        if (!popupOpen && Prefs.inCooldown(c)) {
+            Log.i(TAG, "Detection ignored: cool-down until " + Prefs.clock(Prefs.coolUntil(c)));
+            return "ignored (cool-down until " + Prefs.clock(Prefs.coolUntil(c)) + ")";
         }
         boolean asleep = !c.getSystemService(PowerManager.class).isInteractive();
         boolean locked = c.getSystemService(KeyguardManager.class).isKeyguardLocked();
         Log.i(TAG, "Detection: asleep=" + asleep + " locked=" + locked);
         if (asleep || locked) {
-            if (!Prefs.lockScreen(c)) return;
+            if (!Prefs.lockScreen(c)) return "ignored (lock-screen pop-ups off)";
             // Floating windows can't appear over the lock screen, and ColorOS blocks background
             // activity starts, so use a call-style full-screen notification to wake the screen.
             // Direct start works once ColorOS allows Stairs to open windows in the background;
@@ -72,14 +112,18 @@ public class DetectListener extends NotificationListenerService {
                 Log.w(TAG, "Direct lock-screen start failed", e);
             }
             postLockScreenAlert(c);
-            return;
+            if (!popupOpen) Chime.playIfOn(c);
+            return (popupOpen ? "kept open" : "popup") + " (lock screen)";
         }
         try {
             c.startForegroundService(new Intent(c, FloatService.class)
                     .putExtra(FloatService.EXTRA_AUTO, true));
         } catch (RuntimeException e) {
             Log.w(TAG, "Could not open floating window", e);
+            return "failed to open the floating window";
         }
+        if (!popupOpen) Chime.playIfOn(c);
+        return (popupOpen ? "kept open" : "popup") + " (floating)";
     }
 
     static final String ALERT_CHANNEL = "stairs_alert"; // "detect" was stuck at default importance
@@ -88,10 +132,13 @@ public class DetectListener extends NotificationListenerService {
     private static void postLockScreenAlert(Context c) {
         NotificationManager nm = c.getSystemService(NotificationManager.class);
         nm.deleteNotificationChannel("detect");
+        nm.deleteNotificationChannel("stairs_alert_quiet"); // a short-lived twin; ColorOS demoted it to default
         NotificationChannel ch = new NotificationChannel(ALERT_CHANNEL, "Movement on the stairs",
                 NotificationManager.IMPORTANCE_HIGH);
         ch.setLockscreenVisibility(Notification.VISIBILITY_PUBLIC);
         ch.setBypassDnd(false);
+        ch.setSound(null, null); // the chime (Settings) is the only sound; the screen waking is the alert
+        ch.enableVibration(false);
         nm.createNotificationChannel(ch);
         NotificationChannel actual = nm.getNotificationChannel(ALERT_CHANNEL);
         Log.i(TAG, "Alert channel importance=" + (actual == null ? -1 : actual.getImportance()));
@@ -99,7 +146,7 @@ public class DetectListener extends NotificationListenerService {
                 new Intent(c, LockCamActivity.class)
                         .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK | Intent.FLAG_ACTIVITY_SINGLE_TOP),
                 PendingIntent.FLAG_IMMUTABLE | PendingIntent.FLAG_UPDATE_CURRENT);
-        Notification n = new Notification.Builder(c, ALERT_CHANNEL)
+        Notification.Builder nb = new Notification.Builder(c, ALERT_CHANNEL)
                 .setSmallIcon(R.drawable.ic_cam_small)
                 .setContentTitle("Movement on the stairs")
                 .setContentText("Tap to watch the Stairs camera")
@@ -108,8 +155,8 @@ public class DetectListener extends NotificationListenerService {
                 .setContentIntent(show)
                 .setFullScreenIntent(show, true)
                 .setAutoCancel(true)
-                .setTimeoutAfter(60_000)
-                .build();
+                .setTimeoutAfter(60_000);
+        Notification n = nb.build();
         try {
             nm.notify(ALERT_ID, n);
             Log.i(TAG, "Posted lock-screen alert");

@@ -1,0 +1,10 @@
+<resources>
+    <color name="brand_primary">#82D3DA</color>
+    <color name="brand_on_primary">#00363A</color>
+    <color name="brand_container">#004F54</color>
+    <color name="brand_on_container">#9EF0F6</color>
+    <color name="app_background">#0E1415</color>
+    <color name="card_background">#1A2123</color>
+    <color name="ok">#81C784</color>
+    <color name="warn">#FFB74D</color>
+</resources>

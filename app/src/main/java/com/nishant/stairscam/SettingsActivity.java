@@ -12,11 +12,14 @@ import android.view.View;
 import android.widget.Button;
 import android.widget.EditText;
 import android.widget.LinearLayout;
-import android.widget.RadioGroup;
+import android.widget.CompoundButton;
 import android.widget.TextView;
 import android.widget.Toast;
 
 import androidx.annotation.OptIn;
+import com.google.android.material.button.MaterialButton;
+import com.google.android.material.button.MaterialButtonToggleGroup;
+import com.google.android.material.color.DynamicColors;
 import androidx.media3.common.MediaItem;
 import androidx.media3.common.PlaybackException;
 import androidx.media3.common.Player;
@@ -38,7 +41,7 @@ import java.util.concurrent.TimeUnit;
 @OptIn(markerClass = UnstableApi.class)
 public class SettingsActivity extends Activity {
     private final Handler handler = new Handler(Looper.getMainLooper());
-    private EditText ip, user, pass;
+    private EditText ip, user, pass, ip2, user2, pass2;
     private TextView findStatus, previewStatus;
     private LinearLayout camList;
     private View previewBox;
@@ -49,17 +52,25 @@ public class SettingsActivity extends Activity {
     @Override
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
+        DynamicColors.applyToActivityIfAvailable(this);
         setContentView(R.layout.settings);
         ip = findViewById(R.id.ip);
         user = findViewById(R.id.user);
         pass = findViewById(R.id.pass);
+        ip2 = findViewById(R.id.ip2);
+        user2 = findViewById(R.id.user2);
+        pass2 = findViewById(R.id.pass2);
+        ((EditText) findViewById(R.id.name2)).setText(Prefs.name2(this));
+        ip2.setText(Prefs.ip2(this));
+        user2.setText(Prefs.user2Raw(this));
+        pass2.setText(Prefs.pass2Raw(this));
         findStatus = findViewById(R.id.find_status);
         camList = findViewById(R.id.cam_list);
         previewBox = findViewById(R.id.preview_box);
         preview = findViewById(R.id.preview);
         previewStatus = findViewById(R.id.preview_status);
         findButton = findViewById(R.id.find);
-        RadioGroup quality = findViewById(R.id.quality);
+        MaterialButtonToggleGroup quality = findViewById(R.id.quality);
 
         ip.setText(Prefs.ip(this));
         user.setText(Prefs.user(this));
@@ -71,11 +82,11 @@ public class SettingsActivity extends Activity {
                 new Intent(android.provider.Settings.ACTION_MANAGE_OVERLAY_PERMISSION,
                         android.net.Uri.parse("package:" + getPackageName()))));
 
-        android.widget.Switch autoOpen = findViewById(R.id.auto_open);
+        CompoundButton autoOpen = findViewById(R.id.auto_open);
         EditText camName = findViewById(R.id.cam_name);
         autoOpen.setChecked(Prefs.autoOpen(this));
         camName.setText(Prefs.camName(this));
-        android.widget.Switch quiet = findViewById(R.id.quiet);
+        CompoundButton quiet = findViewById(R.id.quiet);
         Button qs = findViewById(R.id.quiet_start), qe = findViewById(R.id.quiet_end);
         final int[] q = {Prefs.quietStart(this), Prefs.quietEnd(this)};
         Runnable showQuiet = () -> {
@@ -100,7 +111,57 @@ public class SettingsActivity extends Activity {
             saveQuiet.run();
         }, q[1] / 60, q[1] % 60, false).show());
 
-        android.widget.Switch lockScreen = findViewById(R.id.lock_screen);
+        MaterialButtonToggleGroup kind = findViewById(R.id.alert_kind);
+        kind.check(Prefs.alertKind(this) == Prefs.KIND_PERSON ? R.id.k_person
+                : Prefs.alertKind(this) == Prefs.KIND_BOTH ? R.id.k_both : R.id.k_motion);
+        kind.addOnButtonCheckedListener((g, id, checked) -> {
+            if (checked) Prefs.setAlertKind(this,
+                    id == R.id.k_person ? Prefs.KIND_PERSON : id == R.id.k_both ? Prefs.KIND_BOTH : Prefs.KIND_MOTION);
+        });
+
+        // Cool-down: two pickers (closed by me / closed by itself).
+        setupCoolButton(findViewById(R.id.cool_manual), true, "After I close it");
+        setupCoolButton(findViewById(R.id.cool_auto), false, "After it closes itself");
+
+        // Experimental camera watch (off by default).
+        CompoundButton watch = findViewById(R.id.watch);
+        watch.setChecked(Prefs.watchOn(this));
+        watch.setOnCheckedChangeListener((b, on) -> {
+            if (on && !Prefs.configured(this)) {
+                b.setChecked(false);
+                Toast.makeText(this, "Enter and save the camera account first", Toast.LENGTH_SHORT).show();
+                return;
+            }
+            Prefs.setWatchOn(this, on);
+            WatchService.sync(this);
+            updateWatchStatus();
+        });
+
+        // Chime when a pop-up opens (off until switched on; sound picked with the system picker).
+        CompoundButton chime = findViewById(R.id.chime);
+        MaterialButton chimePick = findViewById(R.id.chime_pick);
+        chime.setChecked(Prefs.chimeOn(this));
+        chime.setOnCheckedChangeListener((b, on) -> {
+            Prefs.setChimeOn(this, on);
+            if (on) Chime.play(this);
+        });
+        CompoundButton chimeLoud = findViewById(R.id.chime_loud);
+        chimeLoud.setChecked(Prefs.chimeLoud(this));
+        chimeLoud.setOnCheckedChangeListener((b, on) -> {
+            Prefs.setChimeLoud(this, on);
+            Chime.play(this);
+        });
+        chimePick.setText(Chime.title(this));
+        chimePick.setOnClickListener(v -> {
+            try {
+                startActivityForResult(Chime.pickerIntent(this), REQ_CHIME);
+            } catch (RuntimeException e) {
+                Toast.makeText(this, "No sound picker found on this phone", Toast.LENGTH_SHORT).show();
+            }
+        });
+        findViewById(R.id.chime_test).setOnClickListener(v -> Chime.play(this));
+
+        CompoundButton lockScreen = findViewById(R.id.lock_screen);
         lockScreen.setChecked(Prefs.lockScreen(this));
         lockScreen.setOnCheckedChangeListener((b, on) -> Prefs.setLockScreen(this, on));
         findViewById(R.id.lock_access).setOnClickListener(v -> {
@@ -141,17 +202,65 @@ public class SettingsActivity extends Activity {
                 Toast.makeText(this, "Fill in username, password and camera IP", Toast.LENGTH_SHORT).show();
                 return;
             }
-            Prefs.save(this, i, u, p, quality.getCheckedRadioButtonId() == R.id.q_hd);
+            Prefs.save(this, i, u, p, quality.getCheckedButtonId() == R.id.q_hd);
+            saveCam2();
             stopPreview();
             startActivity(new Intent(this, LaunchActivity.class));
             finish();
         });
     }
 
+    private static final int REQ_CHIME = 7;
+
+    @Override
+    protected void onActivityResult(int requestCode, int resultCode, Intent data) {
+        super.onActivityResult(requestCode, resultCode, data);
+        if (requestCode == REQ_CHIME && resultCode == RESULT_OK) {
+            Chime.savePicked(this, data);
+            ((MaterialButton) findViewById(R.id.chime_pick)).setText(Chime.title(this));
+            Chime.play(this); // let the user hear what they picked
+        }
+    }
+
+    private void saveCam2() {
+        Prefs.saveCam2(this, ip2.getText().toString().trim(), user2.getText().toString().trim(),
+                pass2.getText().toString());
+        Prefs.setName2(this, ((EditText) findViewById(R.id.name2)).getText().toString().trim());
+    }
+
+    private void setupCoolButton(MaterialButton b, boolean manual, String label) {
+        Runnable show = () -> b.setText(label + "\n" + Prefs.coolLabel(manual ? Prefs.coolManualMs(this)
+                : Prefs.coolAutoMs(this)));
+        show.run();
+        b.setAllCaps(false);
+        b.setOnClickListener(v -> new android.app.AlertDialog.Builder(this)
+                .setTitle("Cool-down " + label.toLowerCase(java.util.Locale.ROOT))
+                .setItems(Prefs.COOL_LABELS, (d, which) -> {
+                    Prefs.setCool(this, manual, Prefs.COOL_CHOICES_MS[which]);
+                    show.run();
+                })
+                .show());
+    }
+
+    private void updateWatchStatus() {
+        TextView t = findViewById(R.id.watch_status);
+        if (!Prefs.watchOn(this)) {
+            t.setText("Off");
+            return;
+        }
+        String s = Prefs.watchStatus(this);
+        t.setText(s.isEmpty() ? "Starting…" : s);
+    }
+
+    private void setDot(int id, boolean ok) {
+        findViewById(id).setBackgroundResource(ok ? R.drawable.dot_on : R.drawable.dot_off);
+    }
+
     @Override
     protected void onPause() {
         super.onPause();
-        Prefs.setAutoOpen(this, ((android.widget.Switch) findViewById(R.id.auto_open)).isChecked(),
+        saveCam2();
+        Prefs.setAutoOpen(this, ((CompoundButton) findViewById(R.id.auto_open)).isChecked(),
                 ((EditText) findViewById(R.id.cam_name)).getText().toString().trim());
     }
 
@@ -161,15 +270,23 @@ public class SettingsActivity extends Activity {
         boolean listening = getSystemService(android.app.NotificationManager.class)
                 .isNotificationListenerAccessGranted(new android.content.ComponentName(this, DetectListener.class));
         ((TextView) findViewById(R.id.notif_status)).setText(listening
-                ? "Notification access: on. Turn on Tapo's detection notifications for this camera too."
-                : "Notification access: off. Needed so Stairs can see Tapo's detection alerts.");
+                ? "Reading Tapo alerts"
+                : "Notification access needed to see Tapo's alerts");
+        setDot(R.id.dot_notif, listening);
         findViewById(R.id.notif_access).setVisibility(listening ? View.GONE : View.VISIBLE);
         updateLockStatus();
         updatePause();
+        updateWatchStatus();
+        String last = Prefs.lastTapoAlert(this);
+        ((TextView) findViewById(R.id.last_alert)).setText(last.isEmpty()
+                ? "No Tapo alert seen yet."
+                : "Last Tapo alert (" + (DetectListener.isPersonAlert(last.toLowerCase(java.util.Locale.ROOT))
+                        ? "counts as person" : "counts as motion") + "): " + last);
         boolean allowed = android.provider.Settings.canDrawOverlays(this);
         ((TextView) findViewById(R.id.overlay_status)).setText(allowed
-                ? "Floating window: on. Drag to move, pinch to resize, double-tap for full/half width. Tap the icon again to close."
-                : "Floating window: off (using Android's small picture-in-picture window). Allow it so the window opens full width and remembers where you put it.");
+                ? "Floating window allowed"
+                : "Floating window needs permission (otherwise a small system window is used)");
+        setDot(R.id.dot_overlay, allowed);
         findViewById(R.id.overlay).setVisibility(allowed ? View.GONE : View.VISIBLE);
     }
 
@@ -248,8 +365,9 @@ public class SettingsActivity extends Activity {
                 : !channelHigh() ? "set 'Movement on the stairs' notifications to High / pop-up"
                 : "";
         ((TextView) findViewById(R.id.lock_status)).setText(ready
-                ? "Lock-screen alerts: allowed."
-                : "Lock-screen alerts: not ready - " + why + ".");
+                ? "Lock-screen alerts allowed"
+                : "Lock-screen alerts: " + why);
+        setDot(R.id.dot_lock, ready);
         findViewById(R.id.lock_access).setVisibility(ready ? View.GONE : View.VISIBLE);
     }
 
@@ -299,23 +417,37 @@ public class SettingsActivity extends Activity {
             showFindStatus("No cameras found on this Wi-Fi.");
             return;
         }
-        showFindStatus("Found " + cams.size() + ". Tap one to preview it, and pick the one showing the stairs:");
+        showFindStatus("Found " + cams.size() + ". Tap an address to preview it and use it for Stairs, or tap 2nd to use it as the second camera:");
         for (String addr : cams) {
-            Button b = new Button(this);
+            LinearLayout row = new LinearLayout(this);
+            row.setPadding(0, 6, 0, 0);
+            MaterialButton b = new MaterialButton(this, null,
+                    com.google.android.material.R.attr.materialButtonOutlinedStyle);
             b.setText(addr);
             b.setAllCaps(false);
             b.setOnClickListener(v -> {
                 ip.setText(addr);
-                startPreview(addr);
+                startPreview(addr, user.getText().toString().trim(), pass.getText().toString());
             });
-            camList.addView(b, new LinearLayout.LayoutParams(
+            MaterialButton b2 = new MaterialButton(this, null,
+                    com.google.android.material.R.attr.materialButtonOutlinedStyle);
+            b2.setText("2nd");
+            b2.setAllCaps(false);
+            b2.setOnClickListener(v -> {
+                ip2.setText(addr);
+                boolean own = !user2.getText().toString().trim().isEmpty()
+                        && !pass2.getText().toString().isEmpty();
+                startPreview(addr, own ? user2.getText().toString().trim() : user.getText().toString().trim(),
+                        own ? pass2.getText().toString() : pass.getText().toString());
+            });
+            row.addView(b, new LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 3));
+            row.addView(b2, new LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1));
+            camList.addView(row, new LinearLayout.LayoutParams(
                     LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT));
         }
     }
 
-    private void startPreview(String addr) {
-        String u = user.getText().toString().trim();
-        String p = pass.getText().toString();
+    private void startPreview(String addr, String u, String p) {
         if (u.isEmpty() || p.isEmpty()) {
             Toast.makeText(this, "Enter the camera account first", Toast.LENGTH_SHORT).show();
             return;
