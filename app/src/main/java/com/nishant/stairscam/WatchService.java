@@ -29,7 +29,9 @@ public class WatchService extends Service {
     private static final String TAG = "StairsWatch";
     private static final String CHANNEL = "watch";
     private static final int NOTIF_ID = 4;
-    private static final int POLL_SECONDS = 5;
+    // Short on purpose: this camera seems to hand over new events only at the end of a poll, so a
+    // long wait means a late pop-up (a 10 s wait gave ~7 s late events; 5 s still gave 7-10 s late ones).
+    private static final int POLL_SECONDS = 2;
     private static final long RESUBSCRIBE_MS = 90_000;
     private static final long MIN_TRIGGER_GAP_MS = 3_000;
 

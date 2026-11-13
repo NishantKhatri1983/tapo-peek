@@ -724,13 +724,13 @@
                     android:layout_width="match_parent"
                     android:layout_height="wrap_content"
                     android:layout_marginTop="14dp"
-                    android:text="Cool-down after a pop-up closes"
+                    android:text="Wait for calm after a pop-up closes"
                     android:textAppearance="@style/RowTitle" />
 
                 <TextView
                     android:layout_width="match_parent"
                     android:layout_height="wrap_content"
-                    android:text="No new pop-up for this long, so one visit does not keep re-opening it. Detections while a pop-up is open still keep it open."
+                    android:text="No new pop-up until the camera has seen no movement for this long. Someone who stays at the door gives one pop-up, not one per movement. After 10 minutes of continuous movement it pops up once more."
                     android:textAppearance="@style/RowHint" />
 
                 <LinearLayout

@@ -79,18 +79,41 @@ final class Prefs {
      */
     static final long[] COOL_CHOICES_MS = {0, 30_000, 60_000, 120_000, 300_000, 600_000, 900_000};
     static final String[] COOL_LABELS = {"Off", "30 seconds", "1 minute", "2 minutes", "5 minutes", "10 minutes", "15 minutes"};
-    static long coolManualMs(Context c) { return sp(c).getLong("coolManual", 60_000); }
-    static long coolAutoMs(Context c) { return sp(c).getLong("coolAuto", 60_000); }
+    // "Wait for calm": the quiet period slides forward with every movement seen during it, so a
+    // person who stays (cleaner, delivery) gives one pop-up, not one per movement. Keys are "calm*"
+    // (older builds used a fixed "cool*" window, whose saved values are deliberately not reused).
+    static long coolManualMs(Context c) { return sp(c).getLong("calmManual", 120_000); }
+    static long coolAutoMs(Context c) { return sp(c).getLong("calmAuto", 30_000); }
     static void setCool(Context c, boolean manual, long ms) {
-        sp(c).edit().putLong(manual ? "coolManual" : "coolAuto", ms).apply();
+        sp(c).edit().putLong(manual ? "calmManual" : "calmAuto", ms).apply();
     }
     static long coolUntil(Context c) { return sp(c).getLong("coolUntil", 0); }
     static boolean inCooldown(Context c) { return System.currentTimeMillis() < coolUntil(c); }
 
+    /** After this long of continuous movement the pop-up is allowed through once more. */
+    static final long CALM_CAP_MS = 10 * 60_000;
+
     /** Called when a pop-up window closes. {@code byTimer}: it closed by itself. */
     static void startCooldown(Context c, boolean byTimer) {
         long ms = byTimer ? coolAutoMs(c) : coolManualMs(c);
-        sp(c).edit().putLong("coolUntil", ms > 0 ? System.currentTimeMillis() + ms : 0).apply();
+        long now = System.currentTimeMillis();
+        sp(c).edit().putLong("coolUntil", ms > 0 ? now + ms : 0).putLong("coolMs", ms)
+                .putLong("coolStart", now).apply();
+    }
+
+    /**
+     * Movement seen during the quiet period: push its end out (wait for calm). Returns false when
+     * the cap is reached; the quiet period is then over and this detection should pop up.
+     */
+    static boolean extendCooldown(Context c) {
+        long now = System.currentTimeMillis();
+        SharedPreferences p = sp(c);
+        if (now - p.getLong("coolStart", now) >= CALM_CAP_MS) {
+            p.edit().putLong("coolUntil", 0).apply();
+            return false;
+        }
+        p.edit().putLong("coolUntil", now + p.getLong("coolMs", 0)).apply();
+        return true;
     }
 
     static String coolLabel(long ms) {

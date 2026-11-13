@@ -234,7 +234,7 @@ public class SettingsActivity extends Activity {
         show.run();
         b.setAllCaps(false);
         b.setOnClickListener(v -> new android.app.AlertDialog.Builder(this)
-                .setTitle("Cool-down " + label.toLowerCase(java.util.Locale.ROOT))
+                .setTitle("No movement for this long, " + label.toLowerCase(java.util.Locale.ROOT))
                 .setItems(Prefs.COOL_LABELS, (d, which) -> {
                     Prefs.setCool(this, manual, Prefs.COOL_CHOICES_MS[which]);
                     show.run();

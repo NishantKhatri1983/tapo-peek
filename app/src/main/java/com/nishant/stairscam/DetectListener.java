@@ -55,7 +55,14 @@ public class DetectListener extends NotificationListenerService {
         Log.i(TAG, "Tapo notification: " + text);
 
         if (!Prefs.autoOpen(this) || !Prefs.configured(this)) return;
-        if (!matches(text.toLowerCase(Locale.ROOT), Prefs.camName(this).toLowerCase(Locale.ROOT))) return;
+        if (!matches(text.toLowerCase(Locale.ROOT), Prefs.camName(this).toLowerCase(Locale.ROOT))) {
+            // Keep a trace of Tapo notifications we did not recognise (e.g. empty "fallback" pushes),
+            // so a missed alert can be explained later.
+            String t = text.replace('\n', ' ');
+            EventLog.add(this, "TAPO notification not recognised (" + sbn.getNotification().getChannelId() + "): "
+                    + (t.length() > 120 ? t.substring(0, 120) + "..." : t));
+            return;
+        }
         boolean person = isPersonAlert(text.toLowerCase(Locale.ROOT));
         int kind = Prefs.alertKind(this);
         if ((person && kind == Prefs.KIND_MOTION) || (!person && kind == Prefs.KIND_PERSON)) {
@@ -76,8 +83,21 @@ public class DetectListener extends NotificationListenerService {
         handleDetection(c, "test trigger");
     }
 
+    private static long lastQuietNote;
+    private static int quietSkipped;
+
     static void handleDetection(Context c, String source) {
-        EventLog.add(c, source + " -> " + decide(c));
+        String result = decide(c);
+        if (result.startsWith("ignored (cool-down")) {
+            // Someone staying around produces a detection every few seconds: note it now and then.
+            quietSkipped++;
+            long now = System.currentTimeMillis();
+            if (now - lastQuietNote < 30_000) return;
+            lastQuietNote = now;
+            result += quietSkipped > 1 ? " [" + quietSkipped + " detections since the last note]" : "";
+            quietSkipped = 0;
+        }
+        EventLog.add(c, source + " -> " + result);
     }
 
     private static String decide(Context c) {
@@ -93,8 +113,11 @@ public class DetectListener extends NotificationListenerService {
         // Cool-down only applies while no pop-up is open; an open one is simply kept alive.
         boolean popupOpen = FloatService.running || LockCamActivity.showing;
         if (!popupOpen && Prefs.inCooldown(c)) {
-            Log.i(TAG, "Detection ignored: cool-down until " + Prefs.clock(Prefs.coolUntil(c)));
-            return "ignored (cool-down until " + Prefs.clock(Prefs.coolUntil(c)) + ")";
+            if (Prefs.extendCooldown(c)) { // still moving: wait for calm
+                Log.i(TAG, "Detection ignored: waiting for calm until " + Prefs.clock(Prefs.coolUntil(c)));
+                return "ignored (cool-down until " + Prefs.clock(Prefs.coolUntil(c)) + ")";
+            }
+            Log.i(TAG, "Quiet period hit its cap: letting this one through");
         }
         boolean asleep = !c.getSystemService(PowerManager.class).isInteractive();
         boolean locked = c.getSystemService(KeyguardManager.class).isKeyguardLocked();
