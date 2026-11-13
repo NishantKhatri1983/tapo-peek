@@ -132,6 +132,7 @@ public class FloatService extends Service {
             setDual(true); // "Both cameras" while the window is already open
         }
         if (!auto) {
+            setKeepOn(Prefs.keepAwake(this)); // watching on purpose: don't let the screen time out
             userTouched = true; // opened by hand: stay open
             handler.removeCallbacks(autoClose);
         } else if (!userTouched) {
@@ -265,6 +266,13 @@ public class FloatService extends Service {
 
         attachGestures();
         wm.addView(root, lp);
+    }
+
+    private void setKeepOn(boolean on) {
+        if (root == null) return;
+        int f = WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON;
+        lp.flags = on ? (lp.flags | f) : (lp.flags & ~f);
+        wm.updateViewLayout(root, lp);
     }
 
     private void showSecondPane() {

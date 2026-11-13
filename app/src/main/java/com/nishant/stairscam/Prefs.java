@@ -131,6 +131,10 @@ final class Prefs {
      * Chime when a pop-up opens. Off until switched on. Sound: "" = system default notification
      * sound, "none" = silent, otherwise a sound URI picked with the system sound picker.
      */
+    /** Keep the screen on while a window the user opened by hand is showing. */
+    static boolean keepAwake(Context c) { return sp(c).getBoolean("keepAwake", true); }
+    static void setKeepAwake(Context c, boolean on) { sp(c).edit().putBoolean("keepAwake", on).apply(); }
+
     /** Home-screen icon opens the second camera too. */
     static boolean iconBoth(Context c) { return sp(c).getBoolean("iconBoth", false); }
     static void setIconBoth(Context c, boolean on) { sp(c).edit().putBoolean("iconBoth", on).apply(); }

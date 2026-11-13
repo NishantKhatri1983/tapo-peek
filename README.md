@@ -6,7 +6,7 @@ One tap (or one motion alert) and your Tapo camera appears in a small floating w
 
 ## What it does
 
-- **One-tap live view.** A launcher icon opens the camera straight into a floating window over whatever you are doing. Drag to move, pinch to resize, double-tap to switch between full and half width, tap for mute / pause / close. Size and position are remembered.
+- **One-tap live view.** A launcher icon opens the camera straight into a floating window over whatever you are doing. Drag to move, pinch to resize, double-tap to switch between full and half width, tap for mute / pause / close. Size and position are remembered. When you open it yourself the screen stays on until you close it (a Settings switch turns this off).
 - **Pops up on detection.** When the Tapo app posts a "Motion Detected" / person alert for your camera, the window opens by itself.
 - **Wakes a locked screen.** If the phone or tablet is locked or asleep, the camera appears on the lock screen (the device stays locked), then closes after 40 seconds.
 - **Quiet hours and pause.** Skip automatic pop-ups overnight, or tap the snooze button on a pop-up (15 min to 2 h) when you know someone is at the door.
