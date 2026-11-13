@@ -22,10 +22,13 @@ public class LaunchActivity extends Activity {
         if (android.provider.Settings.canDrawOverlays(this)) {
             // Floating window: tap the icon to open it, tap again to close it.
             Intent svc = new Intent(this, FloatService.class);
-            if (FloatService.running) {
+            boolean viaShortcut = getIntent().getBooleanExtra(FloatService.EXTRA_DUAL, false);
+            boolean both = Prefs.hasCam2(this) && (viaShortcut || Prefs.iconBoth(this));
+            if (FloatService.running && !(viaShortcut && both && !FloatService.dualShown)) {
                 stopService(svc);
             } else {
-                startForegroundService(svc);
+                // Open it, or (from the "Both cameras" shortcut) add the second camera to an open window.
+                startForegroundService(svc.putExtra(FloatService.EXTRA_DUAL, both));
             }
             finish();
             overridePendingTransition(0, 0);

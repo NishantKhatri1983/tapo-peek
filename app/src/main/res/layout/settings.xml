@@ -320,6 +320,39 @@
                     android:text="Shown under Stairs whenever a detection opens the pop-up. Tap “2nd” next to a camera in the list above, or type its IP. Leave empty for Stairs only."
                     android:textAppearance="@style/RowHint" />
 
+                <LinearLayout
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="8dp"
+                    android:gravity="center_vertical"
+                    android:orientation="horizontal">
+
+                    <LinearLayout
+                        android:layout_width="0dp"
+                        android:layout_height="wrap_content"
+                        android:layout_marginEnd="12dp"
+                        android:layout_weight="1"
+                        android:orientation="vertical">
+
+                        <TextView
+                            android:layout_width="match_parent"
+                            android:layout_height="wrap_content"
+                            android:text="Home-screen icon opens both cameras"
+                            android:textAppearance="@style/RowTitle" />
+
+                        <TextView
+                            android:layout_width="match_parent"
+                            android:layout_height="wrap_content"
+                            android:text="Off: the icon opens Stairs only (use the camera button in the window, or press and hold the icon and pick Both cameras)"
+                            android:textAppearance="@style/RowHint" />
+                    </LinearLayout>
+
+                    <com.google.android.material.materialswitch.MaterialSwitch
+                        android:id="@+id/icon_both"
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content" />
+                </LinearLayout>
+
                 <com.google.android.material.textfield.TextInputLayout
                     style="@style/Field"
                     android:layout_width="match_parent"

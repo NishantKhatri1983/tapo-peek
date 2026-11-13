@@ -131,6 +131,10 @@ final class Prefs {
      * Chime when a pop-up opens. Off until switched on. Sound: "" = system default notification
      * sound, "none" = silent, otherwise a sound URI picked with the system sound picker.
      */
+    /** Home-screen icon opens the second camera too. */
+    static boolean iconBoth(Context c) { return sp(c).getBoolean("iconBoth", false); }
+    static void setIconBoth(Context c, boolean on) { sp(c).edit().putBoolean("iconBoth", on).apply(); }
+
     static boolean chimeOn(Context c) { return sp(c).getBoolean("chimeOn", false); }
     static void setChimeOn(Context c, boolean on) { sp(c).edit().putBoolean("chimeOn", on).apply(); }
     /** Play on the alarm volume instead of the notification volume (heard even when notifications are muted). */

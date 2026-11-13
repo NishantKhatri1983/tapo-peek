@@ -138,6 +138,9 @@ public class SettingsActivity extends Activity {
         });
 
         // Chime when a pop-up opens (off until switched on; sound picked with the system picker).
+        CompoundButton iconBoth = findViewById(R.id.icon_both);
+        iconBoth.setChecked(Prefs.iconBoth(this));
+        iconBoth.setOnCheckedChangeListener((b, on) -> Prefs.setIconBoth(this, on));
         CompoundButton chime = findViewById(R.id.chime);
         MaterialButton chimePick = findViewById(R.id.chime_pick);
         chime.setChecked(Prefs.chimeOn(this));

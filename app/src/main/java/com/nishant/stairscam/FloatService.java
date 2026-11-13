@@ -58,6 +58,8 @@ public class FloatService extends Service {
     private static final long RETRY_MS = 3000;
     private static final long CONTROLS_MS = 5000;
     static volatile boolean running;
+    /** True while the second camera is showing in the open window. */
+    static volatile boolean dualShown;
 
     private final Handler handler = new Handler(Looper.getMainLooper());
     private WindowManager wm;
@@ -126,6 +128,9 @@ public class FloatService extends Service {
             registerReceiver(screenOff, new IntentFilter(Intent.ACTION_SCREEN_OFF));
             startPlayer();
         }
+        if (!fresh && !auto && intent != null && intent.getBooleanExtra(EXTRA_DUAL, false)) {
+            setDual(true); // "Both cameras" while the window is already open
+        }
         if (!auto) {
             userTouched = true; // opened by hand: stay open
             handler.removeCallbacks(autoClose);
@@ -140,6 +145,7 @@ public class FloatService extends Service {
     public void onDestroy() {
         super.onDestroy();
         running = false;
+        dualShown = false;
         if (!closedByScreenOff) Prefs.startCooldown(this, closedByTimer);
         handler.removeCallbacksAndMessages(null);
         try {
@@ -216,11 +222,15 @@ public class FloatService extends Service {
             showControls();
         });
         ((TextView) root.findViewById(R.id.label)).setText(Prefs.camName(this));
-        if (dual) {
-            ((TextView) root.findViewById(R.id.label2)).setText(Prefs.name2(this));
-            root.findViewById(R.id.pane2).setVisibility(View.VISIBLE);
-            cam2 = new CamStream(this, root.findViewById(R.id.video2),
-                    root.findViewById(R.id.status2), Prefs.rtsp2Uri(this));
+        if (dual) showSecondPane();
+        ImageButton cam2Button = root.findViewById(R.id.btn_cam2);
+        if (Prefs.hasCam2(this)) {
+            cam2Button.setVisibility(View.VISIBLE);
+            cam2Button.setAlpha(dual ? 1f : 0.55f);
+            cam2Button.setOnClickListener(v -> {
+                setDual(!dual);
+                showControls();
+            });
         }
         root.findViewById(R.id.btn_close).setOnClickListener(v -> stopSelf());
         SnoozeUi.attach(root, this::stopSelf, this::showControls);
@@ -255,6 +265,35 @@ public class FloatService extends Service {
 
         attachGestures();
         wm.addView(root, lp);
+    }
+
+    private void showSecondPane() {
+        ((TextView) root.findViewById(R.id.label2)).setText(Prefs.name2(this));
+        root.findViewById(R.id.pane2).setVisibility(View.VISIBLE);
+        cam2 = new CamStream(this, root.findViewById(R.id.video2),
+                root.findViewById(R.id.status2), Prefs.rtsp2Uri(this));
+        dualShown = true;
+    }
+
+    /** Show or hide the second camera in the open window (the camera button, or "Both cameras"). */
+    private void setDual(boolean on) {
+        if (root == null || on == dual || (on && !Prefs.hasCam2(this))) return;
+        dual = on;
+        if (on) {
+            showSecondPane();
+            if (player != null) cam2.start();
+        } else {
+            if (cam2 != null) {
+                cam2.release();
+                cam2 = null;
+            }
+            root.findViewById(R.id.pane2).setVisibility(View.GONE);
+            dualShown = false;
+        }
+        root.findViewById(R.id.btn_cam2).setAlpha(on ? 1f : 0.55f);
+        setWidth(lp.width);
+        clampPosition();
+        wm.updateViewLayout(root, lp);
     }
 
     private void setWidth(int w) {
