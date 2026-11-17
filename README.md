@@ -10,6 +10,7 @@ One tap (or one motion alert) and your Tapo camera appears in a small floating w
 - **Pops up on detection.** When the Tapo app posts a "Motion Detected" / person alert for your camera, the window opens by itself.
 - **Wakes a locked screen.** If the phone or tablet is locked or asleep, the camera appears on the lock screen (the device stays locked), then closes after 40 seconds.
 - **Quiet hours and pause.** Skip automatic pop-ups overnight, or tap the snooze button on a pop-up (15 min to 2 h) when you know someone is at the door.
+- **Close time you choose.** How long a detection pop-up stays before it closes by itself, set separately for the floating window (default 1 minute) and the lock-screen view (default 40 seconds), from 15 seconds to 10 minutes.
 - **Choose what pops up.** Motion zone only (default), person zone only, or both, so people just passing on the stairs do not trigger it.
 - **Wait for calm.** After you close a pop-up, nothing new opens until the camera has seen no movement for a while (2 min by default), so someone who stays at the door gives one pop-up, not one per movement.
 - **Chime.** Optional sound when a pop-up opens: pick any system notification sound, and optionally play it on the alarm volume so it is heard even with notifications muted.

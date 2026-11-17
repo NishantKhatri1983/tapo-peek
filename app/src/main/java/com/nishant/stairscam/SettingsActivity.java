@@ -120,6 +120,8 @@ public class SettingsActivity extends Activity {
         });
 
         // Cool-down: two pickers (closed by me / closed by itself).
+        setupCloseButton(findViewById(R.id.close_float), false, "Over other apps");
+        setupCloseButton(findViewById(R.id.close_lock), true, "On the lock screen");
         setupCoolButton(findViewById(R.id.cool_manual), true, "After I close it");
         setupCoolButton(findViewById(R.id.cool_auto), false, "After it closes itself");
 
@@ -232,6 +234,20 @@ public class SettingsActivity extends Activity {
         Prefs.saveCam2(this, ip2.getText().toString().trim(), user2.getText().toString().trim(),
                 pass2.getText().toString());
         Prefs.setName2(this, ((EditText) findViewById(R.id.name2)).getText().toString().trim());
+    }
+
+    private void setupCloseButton(MaterialButton b, boolean lock, String label) {
+        Runnable show = () -> b.setText(label + "\n" + Prefs.closeLabel(lock ? Prefs.closeLockMs(this)
+                : Prefs.closeFloatMs(this)));
+        show.run();
+        b.setAllCaps(false);
+        b.setOnClickListener(v -> new android.app.AlertDialog.Builder(this)
+                .setTitle("Close by itself after: " + label.toLowerCase(java.util.Locale.ROOT))
+                .setItems(Prefs.CLOSE_LABELS, (d, which) -> {
+                    Prefs.setClose(this, lock, Prefs.CLOSE_CHOICES_MS[which]);
+                    show.run();
+                })
+                .show());
     }
 
     private void setupCoolButton(MaterialButton b, boolean manual, String label) {

@@ -29,7 +29,6 @@ import androidx.media3.ui.PlayerView;
  */
 @OptIn(markerClass = UnstableApi.class)
 public class LockCamActivity extends Activity {
-    private static final long AUTO_CLOSE_MS = 40_000;
     private static final long RETRY_MS = 3000;
 
     private final Handler handler = new Handler(Looper.getMainLooper());
@@ -107,19 +106,19 @@ public class LockCamActivity extends Activity {
         });
         registerReceiver(unlocked, new IntentFilter(Intent.ACTION_USER_PRESENT));
         getSystemService(android.app.NotificationManager.class).cancel(DetectListener.ALERT_ID);
-        handler.postDelayed(autoClose, AUTO_CLOSE_MS);
+        handler.postDelayed(autoClose, Prefs.closeLockMs(this));
     }
 
     @Override
     protected void onNewIntent(Intent intent) {
         super.onNewIntent(intent);
         getSystemService(android.app.NotificationManager.class).cancel(DetectListener.ALERT_ID);
-        restartTimer(); // another detection: show for another 40 s
+        restartTimer(); // another detection: show for another full period
     }
 
     @Override
     public boolean dispatchTouchEvent(MotionEvent ev) {
-        restartTimer(); // touching gives another 40 s, but it always ends on its own
+        restartTimer(); // touching restarts the time, but it always ends on its own
         return super.dispatchTouchEvent(ev);
     }
 
@@ -159,7 +158,7 @@ public class LockCamActivity extends Activity {
 
     private void restartTimer() {
         handler.removeCallbacks(autoClose);
-        handler.postDelayed(autoClose, AUTO_CLOSE_MS);
+        handler.postDelayed(autoClose, Prefs.closeLockMs(this));
     }
 
     private void updateMuteIcon() {

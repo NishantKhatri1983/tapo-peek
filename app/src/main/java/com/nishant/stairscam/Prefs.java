@@ -73,6 +73,20 @@ final class Prefs {
     static int alertKind(Context c) { return sp(c).getInt("alertKind", KIND_MOTION); }
     static void setAlertKind(Context c, int k) { sp(c).edit().putInt("alertKind", k).apply(); }
 
+    /** How long a detection pop-up stays before it closes by itself (floating window / lock-screen view). */
+    static final long[] CLOSE_CHOICES_MS = {15_000, 30_000, 40_000, 60_000, 120_000, 300_000, 600_000};
+    static final String[] CLOSE_LABELS = {"15 seconds", "30 seconds", "40 seconds", "1 minute", "2 minutes", "5 minutes", "10 minutes"};
+    static long closeFloatMs(Context c) { return sp(c).getLong("closeFloat", 60_000); }
+    static long closeLockMs(Context c) { return sp(c).getLong("closeLock", 40_000); }
+    static void setClose(Context c, boolean lock, long ms) {
+        sp(c).edit().putLong(lock ? "closeLock" : "closeFloat", ms).apply();
+    }
+
+    static String closeLabel(long ms) {
+        for (int i = 0; i < CLOSE_CHOICES_MS.length; i++) if (CLOSE_CHOICES_MS[i] == ms) return CLOSE_LABELS[i];
+        return (ms / 1000) + " seconds";
+    }
+
     /**
      * Cool-down: after a pop-up closes, ignore detections for a while so one visit does not
      * keep re-opening it. Separate lengths for "I closed it" and "it closed by itself" (ms; 0 = off).

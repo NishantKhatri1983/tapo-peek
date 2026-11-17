@@ -53,7 +53,6 @@ public class FloatService extends Service {
     static final String EXTRA_AUTO = "auto";
     /** Show the second camera too (set by detections and by the lock-screen hand-over). */
     static final String EXTRA_DUAL = "dual";
-    private static final long AUTO_CLOSE_MS = 60_000;
     private static final String CHANNEL = "live";
     private static final long RETRY_MS = 3000;
     private static final long CONTROLS_MS = 5000;
@@ -137,7 +136,7 @@ public class FloatService extends Service {
             handler.removeCallbacks(autoClose);
         } else if (!userTouched) {
             handler.removeCallbacks(autoClose); // new detection: extend
-            handler.postDelayed(autoClose, AUTO_CLOSE_MS);
+            handler.postDelayed(autoClose, Prefs.closeFloatMs(this));
         }
         return START_NOT_STICKY;
     }
