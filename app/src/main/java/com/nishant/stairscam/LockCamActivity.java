@@ -36,7 +36,7 @@ public class LockCamActivity extends Activity {
     private TextView status;
     private ImageButton muteButton;
     private ExoPlayer player;
-    private CamStream cam2;
+    private java.util.List<Panes.Extra> extras = new java.util.ArrayList<>();
     private boolean muted;
     /** True once the camera has actually been on a lit screen (not just launched while asleep). */
     private boolean shown;
@@ -90,11 +90,9 @@ public class LockCamActivity extends Activity {
         });
         SnoozeUi.attach(findViewById(android.R.id.content), this::finish, null);
         ((TextView) findViewById(R.id.label)).setText(Prefs.camName(this));
-        if (Prefs.hasCam2(this)) {
-            ((TextView) findViewById(R.id.label2)).setText(Prefs.name2(this));
-            findViewById(R.id.pane2).setVisibility(View.VISIBLE);
-            cam2 = new CamStream(this, findViewById(R.id.video2), findViewById(R.id.status2),
-                    Prefs.rtsp2Uri(this));
+        extras = Panes.build(this);
+        if (!extras.isEmpty()) {
+            Panes.arrange(findViewById(R.id.panes), findViewById(R.id.pane1), extras);
         }
         muted = Prefs.muted(this);
         updateMuteIcon();
@@ -196,12 +194,12 @@ public class LockCamActivity extends Activity {
                 .createMediaSource(MediaItem.fromUri(Prefs.rtspUri(this))));
         player.setPlayWhenReady(true);
         player.prepare();
-        if (cam2 != null) cam2.start();
+        for (Panes.Extra e : extras) e.stream.start();
     }
 
     private void releasePlayer() {
         handler.removeCallbacks(retry);
-        if (cam2 != null) cam2.release();
+        for (Panes.Extra e : extras) e.stream.release();
         if (player != null) {
             video.setPlayer(null);
             player.release();

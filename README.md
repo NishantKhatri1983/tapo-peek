@@ -15,7 +15,7 @@ One tap (or one motion alert) and your Tapo camera appears in a small floating w
 - **Wait for calm.** After you close a pop-up, nothing new opens until the camera has seen no movement for a while (2 min by default), so someone who stays at the door gives one pop-up, not one per movement.
 - **Chime.** Optional sound when a pop-up opens: pick any system notification sound, and optionally play it on the alarm volume so it is heard even with notifications muted.
 - **Camera watch (optional, off by default).** Listens to the camera's own motion events (ONVIF), which catches movement Tapo does not alert on.
-- **Second camera.** Optionally shows a second camera under the first in pop-ups. Open it by hand too: a camera button in the window adds or removes it, press and hold the icon and pick "Both cameras", or turn on "Home-screen icon opens both cameras" in Settings.
+- **More cameras (up to four).** Optionally shows more cameras next to the first in pop-ups: two stack top to bottom, three or four go in a 2 x 2 grid. In Settings, "Add a camera" scans your Wi-Fi and fills the camera in for you. Open them by hand too: a camera button in the window shows or hides the others, press and hold the icon and pick "All cameras", or turn on "Home-screen icon opens all cameras" in Settings.
 - **Activity log on the phone.** Every alert, watcher trigger and pop-up decision is written to a small on-device log, so you can see afterwards what happened while you were away.
 - **Works away from home.** Anything that can reach the camera's LAN address works, for example a Tailscale subnet router.
 

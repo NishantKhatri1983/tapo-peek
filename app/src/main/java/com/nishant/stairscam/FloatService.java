@@ -51,13 +51,13 @@ public class FloatService extends Service {
     static final String ACTION_STOP = "com.nishant.stairscam.STOP";
     /** Opened by a detection alert: close by itself unless the user touches it. */
     static final String EXTRA_AUTO = "auto";
-    /** Show the second camera too (set by detections and by the lock-screen hand-over). */
+    /** Show the other cameras too (set by detections and by the lock-screen hand-over). */
     static final String EXTRA_DUAL = "dual";
     private static final String CHANNEL = "live";
     private static final long RETRY_MS = 3000;
     private static final long CONTROLS_MS = 5000;
     static volatile boolean running;
-    /** True while the second camera is showing in the open window. */
+    /** True while the other cameras are showing in the open window. */
     static volatile boolean dualShown;
 
     private final Handler handler = new Handler(Looper.getMainLooper());
@@ -69,7 +69,7 @@ public class FloatService extends Service {
     private View controls;
     private ImageButton muteButton;
     private ExoPlayer player;
-    private CamStream cam2;
+    private java.util.List<Panes.Extra> extras = new java.util.ArrayList<>();
     private boolean dual;
     private boolean muted;
     private int screenW, screenH, margin, minW;
@@ -120,7 +120,7 @@ public class FloatService extends Service {
         goForeground();
         if (fresh) {
             dual = (auto || (intent != null && intent.getBooleanExtra(EXTRA_DUAL, false)))
-                    && Prefs.hasCam2(this);
+                    && Prefs.hasExtras(this);
             running = true;
             userTouched = false;
             showWindow();
@@ -222,9 +222,9 @@ public class FloatService extends Service {
             showControls();
         });
         ((TextView) root.findViewById(R.id.label)).setText(Prefs.camName(this));
-        if (dual) showSecondPane();
+        if (dual) showExtraPanes();
         ImageButton cam2Button = root.findViewById(R.id.btn_cam2);
-        if (Prefs.hasCam2(this)) {
+        if (Prefs.hasExtras(this)) {
             cam2Button.setVisibility(View.VISIBLE);
             cam2Button.setAlpha(dual ? 1f : 0.55f);
             cam2Button.setOnClickListener(v -> {
@@ -274,27 +274,28 @@ public class FloatService extends Service {
         wm.updateViewLayout(root, lp);
     }
 
-    private void showSecondPane() {
-        ((TextView) root.findViewById(R.id.label2)).setText(Prefs.name2(this));
-        root.findViewById(R.id.pane2).setVisibility(View.VISIBLE);
-        cam2 = new CamStream(this, root.findViewById(R.id.video2),
-                root.findViewById(R.id.status2), Prefs.rtsp2Uri(this));
+    /** Builds and lays out the other cameras next to Stairs (not started until the player is). */
+    private void showExtraPanes() {
+        extras = Panes.build(this);
+        Panes.arrange(root.findViewById(R.id.panes), root.findViewById(R.id.pane1), extras);
         dualShown = true;
     }
 
-    /** Show or hide the second camera in the open window (the camera button, or "Both cameras"). */
+    private int cameraCount() {
+        return dual ? 1 + extras.size() : 1;
+    }
+
+    /** Show or hide the other cameras in the open window (the camera button, or "All cameras"). */
     private void setDual(boolean on) {
-        if (root == null || on == dual || (on && !Prefs.hasCam2(this))) return;
+        if (root == null || on == dual || (on && !Prefs.hasExtras(this))) return;
         dual = on;
         if (on) {
-            showSecondPane();
-            if (player != null) cam2.start();
+            showExtraPanes();
+            if (player != null) for (Panes.Extra e : extras) e.stream.start();
         } else {
-            if (cam2 != null) {
-                cam2.release();
-                cam2 = null;
-            }
-            root.findViewById(R.id.pane2).setVisibility(View.GONE);
+            for (Panes.Extra e : extras) e.stream.release();
+            extras = new java.util.ArrayList<>();
+            Panes.arrange(root.findViewById(R.id.panes), root.findViewById(R.id.pane1), extras);
             dualShown = false;
         }
         root.findViewById(R.id.btn_cam2).setAlpha(on ? 1f : 0.55f);
@@ -306,7 +307,7 @@ public class FloatService extends Service {
     private void setWidth(int w) {
         w = Math.max(minW, Math.min(w, screenW));
         lp.width = w;
-        lp.height = Math.round(w * 9f / 16f) * (dual ? 2 : 1);
+        lp.height = Math.round(Math.round(w * 9f / 16f) * Panes.heightFactor(cameraCount()));
     }
 
     private void clampPosition() {
@@ -462,15 +463,13 @@ public class FloatService extends Service {
                 .createMediaSource(MediaItem.fromUri(Prefs.rtspUri(this))));
         player.setPlayWhenReady(true);
         player.prepare();
-        if (cam2 != null) cam2.start();
+        for (Panes.Extra e : extras) e.stream.start();
     }
 
     private void releasePlayer() {
         handler.removeCallbacks(retry);
-        if (cam2 != null) {
-            cam2.release();
-            cam2 = null;
-        }
+        for (Panes.Extra e : extras) e.stream.release();
+        extras = new java.util.ArrayList<>();
         if (player != null) {
             video.setPlayer(null);
             player.release();

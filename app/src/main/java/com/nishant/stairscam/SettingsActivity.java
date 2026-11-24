@@ -5,6 +5,7 @@ import android.content.Intent;
 import android.net.ConnectivityManager;
 import android.net.LinkAddress;
 import android.net.LinkProperties;
+import android.graphics.Rect;
 import android.os.Bundle;
 import android.os.Handler;
 import android.os.Looper;
@@ -12,6 +13,7 @@ import android.view.View;
 import android.widget.Button;
 import android.widget.EditText;
 import android.widget.LinearLayout;
+import android.widget.ScrollView;
 import android.widget.CompoundButton;
 import android.widget.TextView;
 import android.widget.Toast;
@@ -37,17 +39,55 @@ import java.util.List;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.TimeUnit;
+import java.util.function.Consumer;
 
 @OptIn(markerClass = UnstableApi.class)
 public class SettingsActivity extends Activity {
     private final Handler handler = new Handler(Looper.getMainLooper());
-    private EditText ip, user, pass, ip2, user2, pass2;
+    private EditText ip, user, pass;
     private TextView findStatus, previewStatus;
     private LinearLayout camList;
     private View previewBox;
     private PlayerView preview;
     private ExoPlayer previewPlayer;
     private Button findButton;
+    private ScrollView scroll;
+    private LinearLayout extraCams;
+    private final List<ExtraRow> rows = new ArrayList<>();
+    private boolean scanning;
+    /** Where the one running preview is shown right now (Stairs card or an extra camera's card). */
+    private PlayerView previewTarget;
+
+    /** One extra camera's card in the "More cameras" section. */
+    private final class ExtraRow {
+        final View root;
+        final TextView title, status, previewStatus;
+        final EditText ip, name, user, pass;
+        final View previewBox;
+        final PlayerView preview;
+        final Button find;
+
+        ExtraRow() {
+            root = getLayoutInflater().inflate(R.layout.cam_extra_item, extraCams, false);
+            title = root.findViewById(R.id.item_title);
+            status = root.findViewById(R.id.item_status);
+            ip = root.findViewById(R.id.item_ip);
+            name = root.findViewById(R.id.item_name);
+            user = root.findViewById(R.id.item_user);
+            pass = root.findViewById(R.id.item_pass);
+            previewBox = root.findViewById(R.id.item_preview_box);
+            preview = root.findViewById(R.id.item_preview);
+            previewStatus = root.findViewById(R.id.item_preview_status);
+            find = root.findViewById(R.id.item_find);
+            find.setOnClickListener(v -> findForRow(this));
+            root.findViewById(R.id.item_remove).setOnClickListener(v -> removeRow(this));
+        }
+
+        void say(String s) {
+            status.setVisibility(View.VISIBLE);
+            status.setText(s);
+        }
+    }
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
@@ -57,13 +97,25 @@ public class SettingsActivity extends Activity {
         ip = findViewById(R.id.ip);
         user = findViewById(R.id.user);
         pass = findViewById(R.id.pass);
-        ip2 = findViewById(R.id.ip2);
-        user2 = findViewById(R.id.user2);
-        pass2 = findViewById(R.id.pass2);
-        ((EditText) findViewById(R.id.name2)).setText(Prefs.name2(this));
-        ip2.setText(Prefs.ip2(this));
-        user2.setText(Prefs.user2Raw(this));
-        pass2.setText(Prefs.pass2Raw(this));
+        scroll = findViewById(R.id.scroll);
+        extraCams = findViewById(R.id.extra_cams);
+        for (int slot = 2; slot <= Prefs.MAX_CAMS; slot++) {
+            if (Prefs.camIp(this, slot).isEmpty()) continue;
+            ExtraRow r = addRow();
+            r.ip.setText(Prefs.camIp(this, slot));
+            r.name.setText(Prefs.camLabelRaw(this, slot));
+            r.user.setText(Prefs.camUserRaw(this, slot));
+            r.pass.setText(Prefs.camPassRaw(this, slot));
+        }
+        findViewById(R.id.add_cam).setOnClickListener(v -> {
+            if (rows.size() >= Prefs.MAX_CAMS - 1) {
+                Toast.makeText(this, "Four cameras is the most Stairs can show", Toast.LENGTH_SHORT).show();
+                return;
+            }
+            ExtraRow r = addRow();
+            showRow(r);
+            findForRow(r); // look on the Wi-Fi straight away
+        });
         findStatus = findViewById(R.id.find_status);
         camList = findViewById(R.id.cam_list);
         previewBox = findViewById(R.id.preview_box);
@@ -211,7 +263,7 @@ public class SettingsActivity extends Activity {
                 return;
             }
             Prefs.save(this, i, u, p, quality.getCheckedButtonId() == R.id.q_hd);
-            saveCam2();
+            saveExtras();
             stopPreview();
             startActivity(new Intent(this, LaunchActivity.class));
             finish();
@@ -230,10 +282,85 @@ public class SettingsActivity extends Activity {
         }
     }
 
-    private void saveCam2() {
-        Prefs.saveCam2(this, ip2.getText().toString().trim(), user2.getText().toString().trim(),
-                pass2.getText().toString());
-        Prefs.setName2(this, ((EditText) findViewById(R.id.name2)).getText().toString().trim());
+    /** Writes the extra-camera cards to slots 2, 3, 4 in order and clears the slots left over. */
+    private void saveExtras() {
+        for (int i = 0; i < rows.size(); i++) {
+            ExtraRow r = rows.get(i);
+            Prefs.saveCam(this, i + 2, r.ip.getText().toString().trim(), r.user.getText().toString().trim(),
+                    r.pass.getText().toString(), r.name.getText().toString().trim());
+        }
+        for (int slot = rows.size() + 2; slot <= Prefs.MAX_CAMS; slot++) {
+            Prefs.saveCam(this, slot, "", "", "", "");
+        }
+    }
+
+    private ExtraRow addRow() {
+        ExtraRow r = new ExtraRow();
+        rows.add(r);
+        extraCams.addView(r.root);
+        refreshTitles();
+        return r;
+    }
+
+    private void removeRow(ExtraRow r) {
+        if (previewTarget == r.preview) stopPreview();
+        rows.remove(r);
+        extraCams.removeView(r.root);
+        refreshTitles();
+        saveExtras();
+    }
+
+    private void refreshTitles() {
+        for (int i = 0; i < rows.size(); i++) rows.get(i).title.setText("Camera " + (i + 2));
+        findViewById(R.id.add_cam).setEnabled(rows.size() < Prefs.MAX_CAMS - 1);
+    }
+
+    private void showRow(ExtraRow r) {
+        r.root.post(() -> r.root.requestRectangleOnScreen(
+                new Rect(0, 0, r.root.getWidth(), r.root.getHeight()), false));
+    }
+
+    /** Camera addresses already in use (Stairs and the other cards), so a scan only offers new ones. */
+    private List<String> usedAddresses(ExtraRow except) {
+        List<String> used = new ArrayList<>();
+        used.add(ip.getText().toString().trim());
+        for (ExtraRow o : rows) if (o != except) used.add(o.ip.getText().toString().trim());
+        return used;
+    }
+
+    /** Scans the Wi-Fi and fills this card in: by itself when one new camera shows up, else you pick. */
+    private void findForRow(ExtraRow r) {
+        r.say("Looking for cameras on your Wi-Fi…");
+        scan(found -> {
+            if (found == null) {
+                r.say("Connect to your home Wi-Fi first.");
+                return;
+            }
+            List<String> fresh = new ArrayList<>(found);
+            fresh.removeAll(usedAddresses(r));
+            if (fresh.isEmpty()) {
+                r.say(found.isEmpty() ? "No cameras found on this Wi-Fi."
+                        : "No new cameras found: the ones on this Wi-Fi are already added.");
+            } else if (fresh.size() == 1) {
+                useAddress(r, fresh.get(0));
+            } else {
+                r.say("Found " + fresh.size() + " cameras. Pick one.");
+                new android.app.AlertDialog.Builder(this)
+                        .setTitle("Cameras found on your Wi-Fi")
+                        .setItems(fresh.toArray(new String[0]), (d, which) -> useAddress(r, fresh.get(which)))
+                        .show();
+            }
+        });
+    }
+
+    private void useAddress(ExtraRow r, String addr) {
+        r.ip.setText(addr);
+        r.say("Found " + addr + ". Checking the picture…");
+        showRow(r);
+        boolean own = !r.user.getText().toString().trim().isEmpty() && !r.pass.getText().toString().isEmpty();
+        startPreview(addr, own ? r.user.getText().toString().trim() : user.getText().toString().trim(),
+                own ? r.pass.getText().toString() : pass.getText().toString(),
+                r.previewBox, r.preview, r.previewStatus);
     }
 
     private void setupCloseButton(MaterialButton b, boolean lock, String label) {
@@ -281,7 +408,7 @@ public class SettingsActivity extends Activity {
     @Override
     protected void onPause() {
         super.onPause();
-        saveCam2();
+        saveExtras();
         Prefs.setAutoOpen(this, ((CompoundButton) findViewById(R.id.auto_open)).isChecked(),
                 ((EditText) findViewById(R.id.cam_name)).getText().toString().trim());
     }
@@ -406,9 +533,31 @@ public class SettingsActivity extends Activity {
             showFindStatus("Connect to your home Wi-Fi first.");
             return;
         }
+        if (scanning) {
+            Toast.makeText(this, "Already looking, one moment", Toast.LENGTH_SHORT).show();
+            return;
+        }
         findButton.setEnabled(false);
         camList.removeAllViews();
         showFindStatus("Scanning " + prefix + "x …");
+        scan(found -> {
+            findButton.setEnabled(true);
+            showCameras(found == null ? new ArrayList<>() : found);
+        });
+    }
+
+    /** Scans the phone's /24 for open RTSP ports; calls back on the main thread (null = no Wi-Fi). */
+    private void scan(Consumer<List<String>> done) {
+        String prefix = subnetPrefix();
+        if (prefix == null) {
+            done.accept(null);
+            return;
+        }
+        if (scanning) {
+            Toast.makeText(this, "Already looking, one moment", Toast.LENGTH_SHORT).show();
+            return;
+        }
+        scanning = true;
         new Thread(() -> {
             List<String> found = Collections.synchronizedList(new ArrayList<>());
             ExecutorService pool = Executors.newFixedThreadPool(48);
@@ -429,17 +578,19 @@ public class SettingsActivity extends Activity {
             }
             List<String> sorted = new ArrayList<>(found);
             sorted.sort((a, b) -> Integer.compare(lastOctet(a), lastOctet(b)));
-            handler.post(() -> showCameras(sorted));
+            handler.post(() -> {
+                scanning = false;
+                done.accept(sorted);
+            });
         }).start();
     }
 
     private void showCameras(List<String> cams) {
-        findButton.setEnabled(true);
         if (cams.isEmpty()) {
             showFindStatus("No cameras found on this Wi-Fi.");
             return;
         }
-        showFindStatus("Found " + cams.size() + ". Tap an address to preview it and use it for Stairs, or tap 2nd to use it as the second camera:");
+        showFindStatus("Found " + cams.size() + ". Tap an address to preview it and use it for Stairs, or tap Add to show it as another camera:");
         for (String addr : cams) {
             LinearLayout row = new LinearLayout(this);
             row.setPadding(0, 6, 0, 0);
@@ -449,18 +600,21 @@ public class SettingsActivity extends Activity {
             b.setAllCaps(false);
             b.setOnClickListener(v -> {
                 ip.setText(addr);
-                startPreview(addr, user.getText().toString().trim(), pass.getText().toString());
+                startPreview(addr, user.getText().toString().trim(), pass.getText().toString(),
+                        previewBox, preview, previewStatus);
             });
             MaterialButton b2 = new MaterialButton(this, null,
                     com.google.android.material.R.attr.materialButtonOutlinedStyle);
-            b2.setText("2nd");
+            b2.setText("Add");
             b2.setAllCaps(false);
             b2.setOnClickListener(v -> {
-                ip2.setText(addr);
-                boolean own = !user2.getText().toString().trim().isEmpty()
-                        && !pass2.getText().toString().isEmpty();
-                startPreview(addr, own ? user2.getText().toString().trim() : user.getText().toString().trim(),
-                        own ? pass2.getText().toString() : pass.getText().toString());
+                if (usedAddresses(null).contains(addr)) {
+                    Toast.makeText(this, addr + " is already added", Toast.LENGTH_SHORT).show();
+                } else if (rows.size() >= Prefs.MAX_CAMS - 1) {
+                    Toast.makeText(this, "Four cameras is the most Stairs can show", Toast.LENGTH_SHORT).show();
+                } else {
+                    useAddress(addRow(), addr);
+                }
             });
             row.addView(b, new LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 3));
             row.addView(b2, new LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1));
@@ -469,29 +623,31 @@ public class SettingsActivity extends Activity {
         }
     }
 
-    private void startPreview(String addr, String u, String p) {
+    /** Plays a muted preview of one camera in the given box (the Stairs card or an extra camera's card). */
+    private void startPreview(String addr, String u, String p, View box, PlayerView target, TextView statusView) {
         if (u.isEmpty() || p.isEmpty()) {
             Toast.makeText(this, "Enter the camera account first", Toast.LENGTH_SHORT).show();
             return;
         }
         stopPreview();
-        previewBox.setVisibility(View.VISIBLE);
-        previewStatus.setVisibility(View.VISIBLE);
-        previewStatus.setText("Connecting to " + addr + " …");
+        box.setVisibility(View.VISIBLE);
+        statusView.setVisibility(View.VISIBLE);
+        statusView.setText("Connecting to " + addr + " …");
         previewPlayer = new ExoPlayer.Builder(this).build();
         previewPlayer.setVolume(0f);
-        preview.setPlayer(previewPlayer);
+        previewTarget = target;
+        target.setPlayer(previewPlayer);
         previewPlayer.addListener(new Player.Listener() {
             @Override
             public void onPlaybackStateChanged(int state) {
-                if (state == Player.STATE_READY) previewStatus.setVisibility(View.GONE);
+                if (state == Player.STATE_READY) statusView.setVisibility(View.GONE);
             }
 
             @Override
             public void onPlayerError(PlaybackException e) {
                 String msg = e.getMessage() + " " + e.getCause();
-                previewStatus.setVisibility(View.VISIBLE);
-                previewStatus.setText(msg.contains("401")
+                statusView.setVisibility(View.VISIBLE);
+                statusView.setText(msg.contains("401")
                         ? addr + ": username/password not accepted by this camera"
                         : addr + ": no video (" + e.getErrorCodeName() + ")");
             }
@@ -506,7 +662,8 @@ public class SettingsActivity extends Activity {
 
     private void stopPreview() {
         if (previewPlayer != null) {
-            preview.setPlayer(null);
+            if (previewTarget != null) previewTarget.setPlayer(null);
+            previewTarget = null;
             previewPlayer.release();
             previewPlayer = null;
         }

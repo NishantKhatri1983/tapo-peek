@@ -16,7 +16,7 @@ import androidx.media3.exoplayer.ExoPlayer;
 import androidx.media3.exoplayer.rtsp.RtspMediaSource;
 import androidx.media3.ui.PlayerView;
 
-/** One extra, always-muted live view (the second camera shown under Stairs on a detection). */
+/** One extra, always-muted live view (another camera shown next to Stairs on a detection). */
 @OptIn(markerClass = UnstableApi.class)
 final class CamStream {
     private static final long RETRY_MS = 3000;
@@ -25,6 +25,7 @@ final class CamStream {
     private final PlayerView view;
     private final TextView status;
     private final Uri uri;
+    private final String label;
     private final Handler handler = new Handler(Looper.getMainLooper());
     private ExoPlayer player;
 
@@ -37,17 +38,18 @@ final class CamStream {
         }
     }
 
-    CamStream(Context ctx, PlayerView view, TextView status, Uri uri) {
+    CamStream(Context ctx, PlayerView view, TextView status, Uri uri, String label) {
         this.ctx = ctx;
         this.view = view;
         this.status = status;
         this.uri = uri;
+        this.label = label;
     }
 
     void start() {
         if (player != null) return;
         status.setVisibility(android.view.View.VISIBLE);
-        status.setText("Connecting to second camera…");
+        status.setText("Connecting to " + label + "…");
         player = new ExoPlayer.Builder(ctx).setLoadControl(new DefaultLoadControl.Builder()
                 .setBufferDurationsMs(500, 2000, 200, 300).build()).build();
         player.setVolume(0f);
@@ -66,8 +68,8 @@ final class CamStream {
                 status.setVisibility(android.view.View.VISIBLE);
                 String msg = error.getMessage() + " " + error.getCause();
                 status.setText(msg.contains("401")
-                        ? "Second camera: wrong username/password"
-                        : "Can't reach second camera - retrying");
+                        ? label + ": wrong username/password"
+                        : "Can't reach " + label + " - retrying");
                 handler.removeCallbacks(retry);
                 handler.postDelayed(retry, RETRY_MS);
             }

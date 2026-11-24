@@ -161,10 +161,6 @@ final class Prefs {
     static String chimeUri(Context c) { return sp(c).getString("chimeUri", ""); }
     static void setChimeUri(Context c, String s) { sp(c).edit().putString("chimeUri", s).apply(); }
 
-    /** Label shown on the second camera's pane. */
-    static String name2(Context c) { return sp(c).getString("name2", "Camera 2"); }
-    static void setName2(Context c, String s) { sp(c).edit().putString("name2", s.isEmpty() ? "Camera 2" : s).apply(); }
-
     static String camName(Context c) { return sp(c).getString("camName", "Stairs"); }
     static String lastTapoAlert(Context c) { return sp(c).getString("lastTapo", ""); }
 
@@ -181,21 +177,45 @@ final class Prefs {
                 .putBoolean("hd", hd).apply();
     }
 
-    /** Optional second camera, shown under Stairs when a detection pops the window up. */
-    static String ip2(Context c) { return sp(c).getString("ip2", ""); }
-    static String user2Raw(Context c) { return sp(c).getString("user2", ""); }
-    static String pass2Raw(Context c) { return sp(c).getString("pass2", ""); }
+    /**
+     * Extra cameras shown next to Stairs (slots 2..MAX_CAMS), up to four cameras in all. Slot 2 keeps the
+     * old "ip2/user2/pass2/name2" keys, so an existing second camera carries over unchanged. An empty
+     * user/password means "same account as Stairs".
+     */
+    static final int MAX_CAMS = 4;
 
-    static void saveCam2(Context c, String ip, String user, String pass) {
-        sp(c).edit().putString("ip2", ip).putString("user2", user).putString("pass2", pass).apply();
+    static String camIp(Context c, int slot) { return sp(c).getString("ip" + slot, ""); }
+    static String camUserRaw(Context c, int slot) { return sp(c).getString("user" + slot, ""); }
+    static String camPassRaw(Context c, int slot) { return sp(c).getString("pass" + slot, ""); }
+    static String camLabelRaw(Context c, int slot) { return sp(c).getString("name" + slot, ""); }
+
+    /** Label shown on the camera's pane ("Camera 3" until the user names it). */
+    static String camLabel(Context c, int slot) {
+        String s = camLabelRaw(c, slot);
+        return s.isEmpty() ? "Camera " + slot : s;
     }
 
-    static boolean hasCam2(Context c) { return configured(c) && !ip2(c).isEmpty(); }
+    static void saveCam(Context c, int slot, String ip, String user, String pass, String label) {
+        sp(c).edit().putString("ip" + slot, ip).putString("user" + slot, user)
+                .putString("pass" + slot, pass).putString("name" + slot, label).apply();
+    }
 
-    /** The second camera's own account if one was entered, otherwise the Stairs account. */
-    static Uri rtsp2Uri(Context c) {
-        boolean own = !user2Raw(c).isEmpty() && !pass2Raw(c).isEmpty();
-        return rtspUri(ip2(c), own ? user2Raw(c) : user(c), own ? pass2Raw(c) : pass(c), hd(c));
+    /** The slots (2..MAX_CAMS) that have an address, in order. Empty until Stairs itself is set up. */
+    static java.util.List<Integer> extraCams(Context c) {
+        java.util.List<Integer> out = new java.util.ArrayList<>();
+        if (!configured(c)) return out;
+        for (int n = 2; n <= MAX_CAMS; n++) if (!camIp(c, n).isEmpty()) out.add(n);
+        return out;
+    }
+
+    /** True if at least one camera besides Stairs is set up. */
+    static boolean hasExtras(Context c) { return !extraCams(c).isEmpty(); }
+
+    /** The extra camera's own account if one was entered, otherwise the Stairs account. */
+    static Uri rtspUri(Context c, int slot) {
+        boolean own = !camUserRaw(c, slot).isEmpty() && !camPassRaw(c, slot).isEmpty();
+        return rtspUri(camIp(c, slot), own ? camUserRaw(c, slot) : user(c),
+                own ? camPassRaw(c, slot) : pass(c), hd(c));
     }
 
     static boolean configured(Context c) {

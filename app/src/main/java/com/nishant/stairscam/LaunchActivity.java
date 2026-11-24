@@ -23,11 +23,11 @@ public class LaunchActivity extends Activity {
             // Floating window: tap the icon to open it, tap again to close it.
             Intent svc = new Intent(this, FloatService.class);
             boolean viaShortcut = getIntent().getBooleanExtra(FloatService.EXTRA_DUAL, false);
-            boolean both = Prefs.hasCam2(this) && (viaShortcut || Prefs.iconBoth(this));
+            boolean both = Prefs.hasExtras(this) && (viaShortcut || Prefs.iconBoth(this));
             if (FloatService.running && !(viaShortcut && both && !FloatService.dualShown)) {
                 stopService(svc);
             } else {
-                // Open it, or (from the "Both cameras" shortcut) add the second camera to an open window.
+                // Open it, or (from the "All cameras" shortcut) add the other cameras to an open window.
                 startForegroundService(svc.putExtra(FloatService.EXTRA_DUAL, both));
             }
             finish();

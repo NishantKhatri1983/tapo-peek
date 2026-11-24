@@ -1,5 +1,6 @@
 <?xml version="1.0" encoding="utf-8"?>
 <ScrollView xmlns:android="http://schemas.android.com/apk/res/android"
+    android:id="@+id/scroll"
     xmlns:app="http://schemas.android.com/apk/res-auto"
     android:layout_width="match_parent"
     android:layout_height="match_parent"
@@ -295,7 +296,7 @@
             </LinearLayout>
         </com.google.android.material.card.MaterialCardView>
 
-        <!-- Second camera -->
+        <!-- More cameras -->
         <com.google.android.material.card.MaterialCardView
             style="@style/Card"
             android:layout_width="match_parent"
@@ -311,13 +312,13 @@
                     style="@style/CardTitle"
                     android:layout_width="match_parent"
                     android:layout_height="wrap_content"
-                    android:text="Second camera (optional)" />
+                    android:text="More cameras (optional)" />
 
                 <TextView
                     android:layout_width="match_parent"
                     android:layout_height="wrap_content"
                     android:layout_marginTop="4dp"
-                    android:text="Shown under Stairs whenever a detection opens the pop-up. Tap “2nd” next to a camera in the list above, or type its IP. Leave empty for Stairs only."
+                    android:text="Up to three more, shown next to Stairs whenever a detection opens the pop-up. Tap Add a camera and the app looks for cameras on your Wi-Fi by itself."
                     android:textAppearance="@style/RowHint" />
 
                 <LinearLayout
@@ -337,13 +338,13 @@
                         <TextView
                             android:layout_width="match_parent"
                             android:layout_height="wrap_content"
-                            android:text="Home-screen icon opens both cameras"
+                            android:text="Home-screen icon opens all cameras"
                             android:textAppearance="@style/RowTitle" />
 
                         <TextView
                             android:layout_width="match_parent"
                             android:layout_height="wrap_content"
-                            android:text="Off: the icon opens Stairs only (use the camera button in the window, or press and hold the icon and pick Both cameras)"
+                            android:text="Off: the icon opens Stairs only (use the camera button in the window, or press and hold the icon and pick All cameras)"
                             android:textAppearance="@style/RowHint" />
                     </LinearLayout>
 
@@ -353,62 +354,19 @@
                         android:layout_height="wrap_content" />
                 </LinearLayout>
 
-                <com.google.android.material.textfield.TextInputLayout
-                    style="@style/Field"
+                <LinearLayout
+                    android:id="@+id/extra_cams"
                     android:layout_width="match_parent"
                     android:layout_height="wrap_content"
-                    android:hint="Camera IP address">
+                    android:orientation="vertical" />
 
-                    <com.google.android.material.textfield.TextInputEditText
-                        android:id="@+id/ip2"
-                        android:layout_width="match_parent"
-                        android:layout_height="wrap_content"
-                        android:importantForAutofill="no"
-                        android:inputType="text|textNoSuggestions" />
-                </com.google.android.material.textfield.TextInputLayout>
-
-                <com.google.android.material.textfield.TextInputLayout
-                    style="@style/Field"
+                <com.google.android.material.button.MaterialButton
+                    android:id="@+id/add_cam"
+                    style="@style/Widget.Material3.Button.TonalButton"
                     android:layout_width="match_parent"
                     android:layout_height="wrap_content"
-                    android:hint="Label on screen (e.g. Kitchen)">
-
-                    <com.google.android.material.textfield.TextInputEditText
-                        android:id="@+id/name2"
-                        android:layout_width="match_parent"
-                        android:layout_height="wrap_content"
-                        android:importantForAutofill="no"
-                        android:inputType="text|textNoSuggestions" />
-                </com.google.android.material.textfield.TextInputLayout>
-
-                <com.google.android.material.textfield.TextInputLayout
-                    style="@style/Field"
-                    android:layout_width="match_parent"
-                    android:layout_height="wrap_content"
-                    android:hint="Username (empty = same account as above)">
-
-                    <com.google.android.material.textfield.TextInputEditText
-                        android:id="@+id/user2"
-                        android:layout_width="match_parent"
-                        android:layout_height="wrap_content"
-                        android:importantForAutofill="no"
-                        android:inputType="text|textNoSuggestions" />
-                </com.google.android.material.textfield.TextInputLayout>
-
-                <com.google.android.material.textfield.TextInputLayout
-                    style="@style/Field"
-                    android:layout_width="match_parent"
-                    android:layout_height="wrap_content"
-                    android:hint="Password"
-                    app:endIconMode="password_toggle">
-
-                    <com.google.android.material.textfield.TextInputEditText
-                        android:id="@+id/pass2"
-                        android:layout_width="match_parent"
-                        android:layout_height="wrap_content"
-                        android:importantForAutofill="no"
-                        android:inputType="textPassword" />
-                </com.google.android.material.textfield.TextInputLayout>
+                    android:layout_marginTop="12dp"
+                    android:text="Add a camera" />
             </LinearLayout>
         </com.google.android.material.card.MaterialCardView>
 
