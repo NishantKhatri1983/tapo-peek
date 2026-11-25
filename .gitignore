@@ -13,3 +13,9 @@ captures/
 
 # Personal notes and device-specific details (not part of the project)
 STATUS.md
+
+# Local camera companion (models, biometric data, and runtime)
+.venv/
+__pycache__/
+companion/.runtime/
+companion/local-data/

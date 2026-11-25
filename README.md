@@ -80,6 +80,10 @@ adb install -r app/build/outputs/apk/debug/app-debug.apk
 | `CamActivity` | picture-in-picture fallback when the overlay permission is missing |
 | `SettingsActivity` | camera account, camera finder, permissions, quiet hours, pause |
 
+## Optional Windows camera AI pilot
+
+The [local AI companion](companion/README.md) detects people, cats and dogs from RTSP and can optionally match enrolled household faces. It currently emits local test events only; it does not change Tapo Peek's alerts or require Claude, MCP, or cloud inference.
+
 ## Limitations and security
 
 - Live view needs network access to the camera (same Wi-Fi, or VPN into it).
