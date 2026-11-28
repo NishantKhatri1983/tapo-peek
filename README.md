@@ -90,3 +90,7 @@ adb install -r app/build/outputs/apk/debug/app-debug.apk
 ## License
 
 MIT, see [LICENSE](LICENSE).
+
+## Project notes
+
+History, decisions and facts learned about Tapo cameras: [docs/PROJECT-NOTES.md](docs/PROJECT-NOTES.md).
