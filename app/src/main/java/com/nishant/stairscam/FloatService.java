@@ -70,7 +70,12 @@ public class FloatService extends Service {
     private ImageButton muteButton;
     private ExoPlayer player;
     private java.util.List<Panes.Extra> extras = new java.util.ArrayList<>();
+    /** The other cameras are showing. */
     private boolean dual;
+    /** The Stairs camera is showing (at least one of Stairs / the others always is). */
+    private boolean stairsOn = true;
+    private View pane1;
+    private ImageButton stairsButton, cam2Button;
     private boolean muted;
     private int screenW, screenH, margin, minW;
 
@@ -121,6 +126,11 @@ public class FloatService extends Service {
         if (fresh) {
             dual = (auto || (intent != null && intent.getBooleanExtra(EXTRA_DUAL, false)))
                     && Prefs.hasExtras(this);
+            stairsOn = true;
+            if (!auto && Prefs.hasExtras(this) && Prefs.stairsHidden(this)) {
+                stairsOn = false; // opened by hand and Stairs was switched off last time: only the other cameras
+                dual = true;
+            }
             running = true;
             userTouched = false;
             showWindow();
@@ -211,6 +221,7 @@ public class FloatService extends Service {
         measureScreen();
 
         root = LayoutInflater.from(this).inflate(R.layout.floating, null);
+        pane1 = root.findViewById(R.id.pane1);
         video = root.findViewById(R.id.video);
         status = root.findViewById(R.id.status);
         controls = root.findViewById(R.id.controls);
@@ -223,12 +234,21 @@ public class FloatService extends Service {
         });
         ((TextView) root.findViewById(R.id.label)).setText(Prefs.camName(this));
         if (dual) showExtraPanes();
-        ImageButton cam2Button = root.findViewById(R.id.btn_cam2);
+        stairsButton = root.findViewById(R.id.btn_stairs);
+        cam2Button = root.findViewById(R.id.btn_cam2);
         if (Prefs.hasExtras(this)) {
+            stairsButton.setVisibility(View.VISIBLE);
             cam2Button.setVisibility(View.VISIBLE);
-            cam2Button.setAlpha(dual ? 1f : 0.55f);
+            updateViewButtons();
+            // Each button switches its camera(s) on or off; switching off the only one showing swaps to the other.
+            stairsButton.setOnClickListener(v -> {
+                setViews(!stairsOn, dual || stairsOn);
+                Prefs.setStairsHidden(this, !stairsOn); // remembered for the next hand-opened window
+                showControls();
+            });
             cam2Button.setOnClickListener(v -> {
-                setDual(!dual);
+                setViews(stairsOn || dual, !dual);
+                Prefs.setStairsHidden(this, !stairsOn);
                 showControls();
             });
         }
@@ -274,31 +294,62 @@ public class FloatService extends Service {
         wm.updateViewLayout(root, lp);
     }
 
-    /** Builds and lays out the other cameras next to Stairs (not started until the player is). */
+    /** Builds and lays out the other cameras (not started until the players are). */
     private void showExtraPanes() {
         extras = Panes.build(this);
-        Panes.arrange(root.findViewById(R.id.panes), root.findViewById(R.id.pane1), extras);
+        arrangePanes();
         dualShown = true;
     }
 
+    /** Puts the panes that are switched on into the window. */
+    private void arrangePanes() {
+        java.util.List<View> cells = new java.util.ArrayList<>();
+        if (stairsOn) cells.add(pane1);
+        for (Panes.Extra e : extras) cells.add(e.pane);
+        Panes.arrange(root.findViewById(R.id.panes), cells);
+    }
+
     private int cameraCount() {
-        return dual ? 1 + extras.size() : 1;
+        return (stairsOn ? 1 : 0) + (dual ? extras.size() : 0);
+    }
+
+    private void updateViewButtons() {
+        if (stairsButton != null) stairsButton.setAlpha(stairsOn ? 1f : 0.55f);
+        if (cam2Button != null) cam2Button.setAlpha(dual ? 1f : 0.55f);
     }
 
     /** Show or hide the other cameras in the open window (the camera button, or "All cameras"). */
     private void setDual(boolean on) {
-        if (root == null || on == dual || (on && !Prefs.hasExtras(this))) return;
-        dual = on;
-        if (on) {
-            showExtraPanes();
-            if (player != null) for (Panes.Extra e : extras) e.stream.start();
-        } else {
-            for (Panes.Extra e : extras) e.stream.release();
-            extras = new java.util.ArrayList<>();
-            Panes.arrange(root.findViewById(R.id.panes), root.findViewById(R.id.pane1), extras);
-            dualShown = false;
+        setViews(stairsOn, on);
+    }
+
+    /**
+     * Choose which cameras the open window shows: Stairs and/or the other cameras. Cameras that are not
+     * shown are not streamed (no data, no battery). The window is never left empty.
+     */
+    private void setViews(boolean stairs, boolean others) {
+        if (root == null) return;
+        if (others && !Prefs.hasExtras(this)) others = false;
+        if (!stairs && !others) stairs = true;
+        if (stairs == stairsOn && others == dual) return;
+        if (others != dual) {
+            dual = others;
+            if (others) {
+                extras = Panes.build(this);
+                dualShown = true;
+            } else {
+                for (Panes.Extra e : extras) e.stream.release();
+                extras = new java.util.ArrayList<>();
+                dualShown = false;
+            }
         }
-        root.findViewById(R.id.btn_cam2).setAlpha(on ? 1f : 0.55f);
+        if (stairs != stairsOn) {
+            stairsOn = stairs;
+            if (stairs) startStairs(); else stopStairs();
+        }
+        arrangePanes();
+        if (dual) for (Panes.Extra e : extras) e.stream.start();
+        updateViewButtons();
         setWidth(lp.width);
         clampPosition();
         wm.updateViewLayout(root, lp);
@@ -426,6 +477,12 @@ public class FloatService extends Service {
     }
 
     private void startPlayer() {
+        if (stairsOn) startStairs();
+        for (Panes.Extra e : extras) e.stream.start();
+    }
+
+    private void startStairs() {
+        if (player != null) return;
         status.setVisibility(View.VISIBLE);
         status.setText("Connecting to Stairs…");
         DefaultLoadControl loadControl = new DefaultLoadControl.Builder()
@@ -463,13 +520,16 @@ public class FloatService extends Service {
                 .createMediaSource(MediaItem.fromUri(Prefs.rtspUri(this))));
         player.setPlayWhenReady(true);
         player.prepare();
-        for (Panes.Extra e : extras) e.stream.start();
     }
 
     private void releasePlayer() {
-        handler.removeCallbacks(retry);
         for (Panes.Extra e : extras) e.stream.release();
         extras = new java.util.ArrayList<>();
+        stopStairs();
+    }
+
+    private void stopStairs() {
+        handler.removeCallbacks(retry);
         if (player != null) {
             video.setPlayer(null);
             player.release();

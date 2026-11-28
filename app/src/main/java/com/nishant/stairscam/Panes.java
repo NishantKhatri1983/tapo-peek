@@ -49,24 +49,27 @@ final class Panes {
 
     /** Puts Stairs (pane1) and the extra panes into the container, replacing whatever was there. */
     static void arrange(LinearLayout container, View pane1, List<Extra> extras) {
-        detach(pane1);
-        for (Extra e : extras) detach(e.pane);
-        container.removeAllViews();
-        container.setOrientation(LinearLayout.VERTICAL);
-        int gap = Math.round(2 * container.getResources().getDisplayMetrics().density);
-        if (extras.size() <= 1) {
-            add(container, pane1, new LinearLayout.LayoutParams(-1, 0, 1f));
-            for (Extra e : extras) {
-                LinearLayout.LayoutParams lp = new LinearLayout.LayoutParams(-1, 0, 1f);
-                lp.topMargin = gap;
-                add(container, e.pane, lp);
-            }
-            return;
-        }
-        // Three or four cameras: 2 x 2 grid, Stairs top left.
         List<View> cells = new ArrayList<>();
         cells.add(pane1);
         for (Extra e : extras) cells.add(e.pane);
+        arrange(container, cells);
+    }
+
+    /** Lays out any one to four panes: one fills the window, two stack, three or four form a 2 x 2 grid. */
+    static void arrange(LinearLayout container, List<View> cells) {
+        for (View v : cells) detach(v);
+        container.removeAllViews();
+        container.setOrientation(LinearLayout.VERTICAL);
+        int gap = Math.round(2 * container.getResources().getDisplayMetrics().density);
+        if (cells.size() <= 2) {
+            for (int i = 0; i < cells.size(); i++) {
+                LinearLayout.LayoutParams lp = new LinearLayout.LayoutParams(-1, 0, 1f);
+                if (i > 0) lp.topMargin = gap;
+                add(container, cells.get(i), lp);
+            }
+            return;
+        }
+        // Three or four cameras: 2 x 2 grid, first camera top left.
         for (int row = 0; row < 2; row++) {
             LinearLayout r = new LinearLayout(container.getContext());
             r.setOrientation(LinearLayout.HORIZONTAL);

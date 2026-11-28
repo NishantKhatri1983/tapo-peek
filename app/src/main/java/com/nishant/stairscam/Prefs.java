@@ -153,6 +153,10 @@ final class Prefs {
     static boolean iconBoth(Context c) { return sp(c).getBoolean("iconBoth", false); }
     static void setIconBoth(Context c, boolean on) { sp(c).edit().putBoolean("iconBoth", on).apply(); }
 
+    /** The Stairs camera was switched off in the window (hand-opened windows then start without it). */
+    static boolean stairsHidden(Context c) { return sp(c).getBoolean("stairsHidden", false); }
+    static void setStairsHidden(Context c, boolean on) { sp(c).edit().putBoolean("stairsHidden", on).apply(); }
+
     static boolean chimeOn(Context c) { return sp(c).getBoolean("chimeOn", false); }
     static void setChimeOn(Context c, boolean on) { sp(c).edit().putBoolean("chimeOn", on).apply(); }
     /** Play on the alarm volume instead of the notification volume (heard even when notifications are muted). */
